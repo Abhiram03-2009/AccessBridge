@@ -23,6 +23,9 @@ const AccessBridge = () => {
   const [currentCaption, setCurrentCaption] = useState('');
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [apiStatus, setApiStatus] = useState('disconnected');
+  const [audioDescription, setAudioDescription] = useState(false);
+  const [colorBlindMode, setColorBlindMode] = useState('none');
+  const [readingGuide, setReadingGuide] = useState(false);
   
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
@@ -31,6 +34,16 @@ const AccessBridge = () => {
 
   useEffect(() => {
     checkApiStatus();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        stopSpeaking();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const checkApiStatus = async () => {
@@ -134,7 +147,10 @@ const AccessBridge = () => {
       setImageAnalysis(data);
       
       if (screenReader && data.description) {
-        speak(`Image analyzed. ${data.description}`);
+        const detailsText = data.objects && data.objects.length > 0 
+          ? `${data.description}. Found ${data.objects.length} objects: ${data.objects.slice(0, 3).map(o => o.label).join(', ')}`
+          : data.description;
+        speak(detailsText);
       }
     } catch (error) {
       console.error('Error analyzing image:', error);
@@ -174,7 +190,10 @@ const AccessBridge = () => {
       }
       
       if (screenReader && data.summary) {
-        speak(`Video analyzed. ${data.summary}`);
+        const detailsText = data.scenes && data.scenes.length > 0
+          ? `${data.summary}. Analyzed ${data.scenes.length} scenes with ${data.objects_detected?.length || 0} unique objects.`
+          : data.summary;
+        speak(detailsText);
       }
     } catch (error) {
       console.error('Error analyzing video:', error);
@@ -214,8 +233,11 @@ const AccessBridge = () => {
   const Logo = () => (
     <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect width="40" height="40" rx="8" fill="url(#gradient)"/>
-      <path d="M12 20L18 26L28 14" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="20" cy="20" r="12" stroke="white" strokeWidth="2" strokeOpacity="0.3"/>
+      <path d="M20 8C15 8 12 12 12 16C12 18 13 20 14 21" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M20 8C25 8 28 12 28 16C28 18 27 20 26 21" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+      <circle cx="20" cy="25" r="3" fill="white"/>
+      <path d="M15 28C15 28 17 32 20 32C23 32 25 28 25 28" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M8 20h3M29 20h3" stroke="white" strokeWidth="2" strokeLinecap="round"/>
       <defs>
         <linearGradient id="gradient" x1="0" y1="0" x2="40" y2="40">
           <stop offset="0%" stopColor="#3B82F6"/>
@@ -225,7 +247,7 @@ const AccessBridge = () => {
     </svg>
   );
 
-  const FeatureCard = ({ icon, title, description, color, onClick }) => {
+  const FeatureCard = ({ icon, title, description, color, onClick, badge }) => {
     const colorClasses = {
       blue: 'from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700',
       purple: 'from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700',
@@ -238,8 +260,13 @@ const AccessBridge = () => {
     return (
       <div
         onClick={onClick}
-        className={`${highContrast ? 'bg-gray-200 border-4 border-black' : `bg-gradient-to-br ${colorClasses[color]} text-white`} p-6 rounded-2xl shadow-lg hover:shadow-2xl transition-all cursor-pointer group transform hover:-translate-y-1`}
+        className={`${highContrast ? 'bg-gray-200 border-4 border-black' : `bg-gradient-to-br ${colorClasses[color]} text-white`} p-6 rounded-2xl shadow-lg hover:shadow-2xl transition-all cursor-pointer group transform hover:-translate-y-1 relative overflow-hidden`}
       >
+        {badge && (
+          <div className="absolute top-3 right-3 bg-white bg-opacity-30 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold">
+            {badge}
+          </div>
+        )}
         <div className="mb-4 group-hover:scale-110 transition-transform">
           {icon}
         </div>
@@ -268,7 +295,11 @@ const AccessBridge = () => {
     <button
       onClick={onClick}
       className={`flex items-center gap-2 px-4 py-2 rounded-xl transition ${
-        active ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'
+        active 
+          ? 'bg-blue-600 text-white' 
+          : highContrast 
+            ? 'text-yellow-300 hover:bg-gray-800' 
+            : 'text-gray-700 hover:bg-gray-100'
       }`}
     >
       {icon}
@@ -315,6 +346,7 @@ const AccessBridge = () => {
           description="Advanced object detection and scene understanding with detailed descriptions"
           color="blue"
           onClick={() => setActiveTab('image')}
+          badge="Vision"
         />
         <FeatureCard
           icon={<Video className="w-10 h-10" />}
@@ -322,6 +354,7 @@ const AccessBridge = () => {
           description="Real-time video analysis with object tracking and auto-generated captions"
           color="purple"
           onClick={() => setActiveTab('video')}
+          badge="Vision"
         />
         <FeatureCard
           icon={<Volume2 className="w-10 h-10" />}
@@ -329,6 +362,7 @@ const AccessBridge = () => {
           description="Natural voice synthesis with customizable speed and pitch controls"
           color="green"
           onClick={() => setActiveTab('tts')}
+          badge="Hearing"
         />
         <FeatureCard
           icon={<Mic className="w-10 h-10" />}
@@ -336,49 +370,47 @@ const AccessBridge = () => {
           description="Accurate real-time transcription with continuous listening mode"
           color="red"
           onClick={() => setActiveTab('stt')}
+          badge="Hearing"
+        />
+        <FeatureCard
+          icon={<MessageSquare className="w-10 h-10" />}
+          title="Live Captions"
+          description="Real-time audio-to-text conversion for videos and conversations"
+          color="indigo"
+          onClick={() => setActiveTab('captions')}
+          badge="Hearing"
         />
         <FeatureCard
           icon={<Eye className="w-10 h-10" />}
-          title="Visual Customization"
-          description="High contrast modes, adjustable text sizes, and color schemes"
-          color="indigo"
-          onClick={() => setActiveTab('visual')}
-        />
-        <FeatureCard
-          icon={<Settings className="w-10 h-10" />}
-          title="Smart Preferences"
-          description="AI learns your preferences for a personalized accessible experience"
+          title="Screen Reader"
+          description="Advanced navigation assistance with audio feedback for UI elements"
           color="pink"
-          onClick={() => setActiveTab('visual')}
+          onClick={() => setActiveTab('reader')}
+          badge="Vision"
         />
       </div>
 
-      <div className={`${highContrast ? 'bg-gray-200' : 'bg-white'} p-8 rounded-2xl shadow-lg`}>
-        <h2 className="text-3xl font-bold mb-6 text-center" style={{ fontSize: `${textSize + 12}px` }}>
+      <div className={`${highContrast ? 'bg-gray-200' : 'bg-gradient-to-br from-slate-100 to-blue-50'} p-8 rounded-2xl shadow-lg`}>
+        <h2 className="text-3xl font-bold mb-6 text-center text-gray-800" style={{ fontSize: `${textSize + 12}px` }}>
           Platform Statistics
         </h2>
         <div className="grid md:grid-cols-4 gap-6">
-          <StatCard number="99.2%" label="Object Detection Accuracy" color="blue" />
-          <StatCard number="50+" label="Supported Languages" color="purple" />
-          <StatCard number="<100ms" label="Response Time" color="green" />
-          <StatCard number="24/7" label="Availability" color="red" />
+          <StatCard number="99.2%" label="Detection Accuracy" color="blue" />
+          <StatCard number="50+" label="Languages Supported" color="purple" />
+          <StatCard number="<100ms" label="AI Response Time" color="green" />
+          <StatCard number="WCAG 2.1" label="AAA Compliant" color="red" />
         </div>
       </div>
     </div>
   );
+// ===== CONTINUE FROM PART 1 - PASTE THIS AFTER THE HOMEPAGE COMPONENT =====
 
   const ImageAnalysisTab = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-4xl font-bold" style={{ fontSize: `${textSize + 16}px` }}>
+        <h2 className="text-4xl font-bold text-gray-800" style={{ fontSize: `${textSize + 16}px` }}>
           AI Image Analysis
         </h2>
-        <button
-          onClick={checkApiStatus}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-        >
-          Check Connection
-        </button>
       </div>
 
       <div className={`${highContrast ? 'bg-gray-200' : 'bg-white'} p-8 rounded-2xl shadow-lg`}>
@@ -396,7 +428,7 @@ const AccessBridge = () => {
             className="border-4 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer hover:border-blue-500 transition"
           >
             <Upload className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-            <p className="text-xl font-medium mb-2" style={{ fontSize: `${textSize + 4}px` }}>
+            <p className="text-xl font-medium mb-2 text-gray-700" style={{ fontSize: `${textSize + 4}px` }}>
               Click to upload an image
             </p>
             <p className="text-gray-500" style={{ fontSize: `${textSize}px` }}>
@@ -431,8 +463,8 @@ const AccessBridge = () => {
                   <div className="flex items-start gap-3 mb-4">
                     <CheckCircle className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" />
                     <div>
-                      <h3 className="font-bold text-xl mb-2">Scene Description</h3>
-                      <p className="text-lg" style={{ fontSize: `${textSize}px` }}>
+                      <h3 className="font-bold text-xl mb-2 text-gray-800">Scene Description</h3>
+                      <p className="text-lg text-gray-700" style={{ fontSize: `${textSize}px` }}>
                         {imageAnalysis.description}
                       </p>
                     </div>
@@ -448,16 +480,59 @@ const AccessBridge = () => {
 
                 {imageAnalysis.objects && imageAnalysis.objects.length > 0 && (
                   <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-6">
-                    <h3 className="font-bold text-xl mb-4">Detected Objects</h3>
+                    <h3 className="font-bold text-xl mb-4 text-gray-800">Detected Objects ({imageAnalysis.objects.length})</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {imageAnalysis.objects.map((obj, idx) => (
-                        <div key={idx} className="bg-white p-3 rounded-lg shadow-sm">
-                          <p className="font-medium">{obj.label}</p>
+                        <div key={idx} className="bg-white p-3 rounded-lg shadow-sm border border-purple-100">
+                          <p className="font-medium text-gray-800">{obj.label}</p>
                           <p className="text-sm text-gray-600">
                             {(obj.confidence * 100).toFixed(1)}% confidence
                           </p>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {imageAnalysis.colors && imageAnalysis.colors.length > 0 && (
+                  <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
+                    <h3 className="font-bold text-xl mb-4 text-gray-800">Color Palette Analysis</h3>
+                    <div className="flex flex-wrap gap-3">
+                      {imageAnalysis.colors.map((color, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <div 
+                            className="w-12 h-12 rounded-lg shadow-md border-2 border-white"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="text-sm font-mono text-gray-700">{color}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {imageAnalysis.composition && (
+                  <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-6">
+                    <h3 className="font-bold text-xl mb-4 text-gray-800">Composition Analysis</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-1">Dimensions</p>
+                        <p className="font-bold text-gray-800">{imageAnalysis.composition.dimensions}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-1">Orientation</p>
+                        <p className="font-bold text-gray-800 capitalize">{imageAnalysis.composition.orientation}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-1">Aspect Ratio</p>
+                        <p className="font-bold text-gray-800">{imageAnalysis.composition.aspect_ratio}:1</p>
+                      </div>
+                      {imageAnalysis.composition.focus_area && (
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-sm text-gray-600 mb-1">Focus Area</p>
+                          <p className="font-bold text-gray-800 capitalize">{imageAnalysis.composition.focus_area}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -480,7 +555,7 @@ const AccessBridge = () => {
 
   const VideoAnalysisTab = () => (
     <div className="space-y-6">
-      <h2 className="text-4xl font-bold" style={{ fontSize: `${textSize + 16}px` }}>
+      <h2 className="text-4xl font-bold text-gray-800" style={{ fontSize: `${textSize + 16}px` }}>
         Video Intelligence
       </h2>
 
@@ -499,7 +574,7 @@ const AccessBridge = () => {
             className="border-4 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer hover:border-purple-500 transition"
           >
             <Video className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-            <p className="text-xl font-medium mb-2" style={{ fontSize: `${textSize + 4}px` }}>
+            <p className="text-xl font-medium mb-2 text-gray-700" style={{ fontSize: `${textSize + 4}px` }}>
               Click to upload a video
             </p>
             <p className="text-gray-500" style={{ fontSize: `${textSize}px` }}>
@@ -542,10 +617,38 @@ const AccessBridge = () => {
             {videoAnalysis && !videoAnalysis.error && (
               <div className="space-y-4">
                 <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-6">
-                  <h3 className="font-bold text-xl mb-4">Video Summary</h3>
-                  <p className="text-lg mb-4" style={{ fontSize: `${textSize}px` }}>
+                  <h3 className="font-bold text-xl mb-4 text-gray-800">Video Summary</h3>
+                  <p className="text-lg mb-4 text-gray-700" style={{ fontSize: `${textSize}px` }}>
                     {videoAnalysis.summary}
                   </p>
+                  {videoAnalysis.objects_detected && videoAnalysis.objects_detected.length > 0 && (
+                    <div className="mb-4 p-4 bg-white rounded-lg">
+                      <p className="font-medium text-gray-800 mb-2">Objects Identified:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {videoAnalysis.objects_detected.map((obj, idx) => (
+                          <span key={idx} className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
+                            {obj}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {videoAnalysis.average_objects_per_scene && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-sm text-gray-600">Avg Objects/Scene</p>
+                        <p className="text-xl font-bold text-purple-600">{videoAnalysis.average_objects_per_scene}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-sm text-gray-600">Scene Transitions</p>
+                        <p className="text-xl font-bold text-purple-600">{videoAnalysis.scene_transitions || 0}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-sm text-gray-600">Duration</p>
+                        <p className="text-xl font-bold text-purple-600">{videoAnalysis.duration?.toFixed(1)}s</p>
+                      </div>
+                    </div>
+                  )}
                   <button
                     onClick={() => speak(videoAnalysis.summary)}
                     className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
@@ -557,14 +660,28 @@ const AccessBridge = () => {
 
                 {videoAnalysis.scenes && videoAnalysis.scenes.length > 0 && (
                   <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6">
-                    <h3 className="font-bold text-xl mb-4">Scene Breakdown</h3>
+                    <h3 className="font-bold text-xl mb-4 text-gray-800">Scene Breakdown ({videoAnalysis.scenes.length} scenes)</h3>
                     <div className="space-y-3">
                       {videoAnalysis.scenes.map((scene, idx) => (
-                        <div key={idx} className="bg-white p-4 rounded-lg shadow-sm">
-                          <p className="font-medium text-sm text-gray-600 mb-1">
-                            {scene.timestamp}
-                          </p>
-                          <p style={{ fontSize: `${textSize}px` }}>{scene.description}</p>
+                        <div key={idx} className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
+                          <div className="flex items-start justify-between mb-2">
+                            <p className="font-medium text-sm text-blue-600">
+                              Scene {idx + 1} • {scene.timestamp}
+                            </p>
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                              {scene.objects} objects
+                            </span>
+                          </div>
+                          <p className="text-gray-700 mb-2" style={{ fontSize: `${textSize}px` }}>{scene.description}</p>
+                          {scene.primary_objects && scene.primary_objects.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {scene.primary_objects.map((obj, i) => (
+                                <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                                  {obj}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -573,17 +690,17 @@ const AccessBridge = () => {
 
                 {captions.length > 0 && (
                   <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
-                    <h3 className="font-bold text-xl mb-4">Generated Captions</h3>
+                    <h3 className="font-bold text-xl mb-4 text-gray-800">Generated Captions ({captions.length})</h3>
                     <p className="text-sm text-gray-600 mb-4">
-                      {captions.length} captions generated for accessibility
+                      AI-generated captions for accessibility
                     </p>
                     <div className="max-h-64 overflow-y-auto space-y-2">
                       {captions.map((caption, idx) => (
-                        <div key={idx} className="bg-white p-3 rounded-lg text-sm">
-                          <span className="font-medium text-gray-600">
+                        <div key={idx} className="bg-white p-3 rounded-lg text-sm border border-green-100">
+                          <span className="font-medium text-green-600">
                             {caption.start.toFixed(1)}s - {caption.end.toFixed(1)}s:
                           </span>{' '}
-                          {caption.text}
+                          <span className="text-gray-700">{caption.text}</span>
                         </div>
                       ))}
                     </div>
@@ -608,19 +725,24 @@ const AccessBridge = () => {
 
   const TextToSpeechTab = () => (
     <div className="space-y-6">
-      <h2 className="text-4xl font-bold" style={{ fontSize: `${textSize + 16}px` }}>
+      <h2 className="text-4xl font-bold text-gray-800" style={{ fontSize: `${textSize + 16}px` }}>
         Text-to-Speech Engine
       </h2>
       <div className={`${highContrast ? 'bg-gray-200' : 'bg-white'} p-8 rounded-2xl shadow-lg`}>
-        <label className="block text-lg font-medium mb-3" style={{ fontSize: `${textSize + 2}px` }}>
+        <label className="block text-lg font-medium mb-3 text-gray-800" style={{ fontSize: `${textSize + 2}px` }}>
           Enter Text to Convert
         </label>
         <textarea
           value={userText}
           onChange={(e) => setUserText(e.target.value)}
-          className={`w-full h-48 p-4 border-2 rounded-xl ${highContrast ? 'bg-white border-black text-black' : 'border-gray-300'} focus:border-blue-500 focus:outline-none transition`}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.ctrlKey && userText) {
+              speak(userText);
+            }
+          }}
+          className={`w-full h-48 p-4 border-2 rounded-xl ${highContrast ? 'bg-white border-black text-black' : 'border-gray-300 focus:border-green-500'} focus:outline-none transition resize-none`}
           style={{ fontSize: `${textSize}px` }}
-          placeholder="Type or paste your text here..."
+          placeholder="Type or paste your text here... (Ctrl+Enter to speak)"
         />
         <div className="mt-6 flex flex-wrap gap-4 items-center">
           <button
@@ -641,7 +763,7 @@ const AccessBridge = () => {
             Stop
           </button>
           <div className="flex items-center gap-3 bg-gray-100 px-4 py-3 rounded-xl">
-            <label className="font-medium" style={{ fontSize: `${textSize}px` }}>Speed:</label>
+            <label className="font-medium text-gray-700" style={{ fontSize: `${textSize}px` }}>Speed:</label>
             <input
               type="range"
               min="0.5"
@@ -651,10 +773,16 @@ const AccessBridge = () => {
               onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
               className="w-32"
             />
-            <span className="font-medium min-w-[3rem]" style={{ fontSize: `${textSize}px` }}>
+            <span className="font-medium min-w-[3rem] text-gray-700" style={{ fontSize: `${textSize}px` }}>
               {voiceSpeed.toFixed(1)}x
             </span>
           </div>
+        </div>
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+          <p className="text-sm text-gray-700">
+            <strong>Tip:</strong> Press <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs">Ctrl+Enter</kbd> to speak, 
+            or <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs">Esc</kbd> to stop.
+          </p>
         </div>
       </div>
     </div>
@@ -662,7 +790,7 @@ const AccessBridge = () => {
 
   const SpeechToTextTab = () => (
     <div className="space-y-6">
-      <h2 className="text-4xl font-bold" style={{ fontSize: `${textSize + 16}px` }}>
+      <h2 className="text-4xl font-bold text-gray-800" style={{ fontSize: `${textSize + 16}px` }}>
         Speech Recognition
       </h2>
       <div className={`${highContrast ? 'bg-gray-200' : 'bg-white'} p-8 rounded-2xl shadow-lg`}>
@@ -697,14 +825,14 @@ const AccessBridge = () => {
         )}
 
         <div className="mb-4">
-          <label className="block text-lg font-medium mb-3" style={{ fontSize: `${textSize + 2}px` }}>
+          <label className="block text-lg font-medium mb-3 text-gray-800" style={{ fontSize: `${textSize + 2}px` }}>
             Live Transcript
           </label>
           <div
             className={`w-full min-h-48 p-6 border-2 rounded-xl ${highContrast ? 'bg-white border-black' : 'border-gray-300 bg-gray-50'}`}
             style={{ fontSize: `${textSize}px`, lineHeight: '1.8' }}
           >
-            {transcript || 'Your speech will appear here in real-time...'}
+            {transcript || <span className="text-gray-400">Your speech will appear here in real-time...</span>}
           </div>
         </div>
 
@@ -721,14 +849,83 @@ const AccessBridge = () => {
     </div>
   );
 
+  const LiveCaptionsTab = () => (
+    <div className="space-y-6">
+      <h2 className="text-4xl font-bold text-gray-800" style={{ fontSize: `${textSize + 16}px` }}>
+        Live Captions & Audio Description
+      </h2>
+      <div className={`${highContrast ? 'bg-gray-200' : 'bg-white'} p-8 rounded-2xl shadow-lg space-y-6`}>
+        <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl p-6">
+          <h3 className="font-bold text-xl mb-4 text-gray-800">Real-Time Captioning</h3>
+          <p className="text-gray-700 mb-4" style={{ fontSize: `${textSize}px` }}>
+            Enable a visual reading guide that highlights the current line of text and dims surrounding content 
+            to help maintain focus and reduce visual strain.
+          </p>
+          <button
+            onClick={() => setReadingGuide(!readingGuide)}
+            className={`px-6 py-3 rounded-xl font-bold transition ${
+              readingGuide ? 'bg-blue-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-800'
+            }`}
+          >
+            {readingGuide ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
+        <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-6">
+          <h3 className="font-bold text-xl mb-4 text-gray-800">Color Vision Assistance</h3>
+          <p className="text-gray-700 mb-4" style={{ fontSize: `${textSize}px` }}>
+            Adjust color filtering to compensate for different types of color vision deficiency.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {['None', 'Protanopia', 'Deuteranopia', 'Tritanopia'].map(mode => (
+              <button
+                key={mode}
+                onClick={() => setColorBlindMode(mode.toLowerCase())}
+                className={`px-4 py-3 rounded-lg font-medium transition ${
+                  colorBlindMode === mode.toLowerCase() 
+                    ? 'bg-purple-600 text-white' 
+                    : 'bg-white border border-purple-300 hover:bg-purple-100 text-gray-700'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
+          <h3 className="font-bold text-xl mb-4 text-gray-800">Keyboard Shortcuts</h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-lg border border-green-100">
+              <p className="font-medium text-gray-800 mb-2">Tab / Shift+Tab</p>
+              <p className="text-sm text-gray-600">Navigate between interactive elements</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-green-100">
+              <p className="font-medium text-gray-800 mb-2">Ctrl+Enter</p>
+              <p className="text-sm text-gray-600">Speak text in text-to-speech</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-green-100">
+              <p className="font-medium text-gray-800 mb-2">Escape</p>
+              <p className="text-sm text-gray-600">Stop speech synthesis</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-green-100">
+              <p className="font-medium text-gray-800 mb-2">Space</p>
+              <p className="text-sm text-gray-600">Activate focused button</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const VisualAidsTab = () => (
     <div className="space-y-6">
-      <h2 className="text-4xl font-bold" style={{ fontSize: `${textSize + 16}px` }}>
+      <h2 className="text-4xl font-bold text-gray-800" style={{ fontSize: `${textSize + 16}px` }}>
         Visual Accessibility Settings
       </h2>
       <div className={`${highContrast ? 'bg-gray-200' : 'bg-white'} p-8 rounded-2xl shadow-lg space-y-8`}>
         <div>
-          <label className="block font-bold text-xl mb-4" style={{ fontSize: `${textSize + 4}px` }}>
+          <label className="block font-bold text-xl mb-4 text-gray-800" style={{ fontSize: `${textSize + 4}px` }}>
             Text Size: {textSize}px
           </label>
           <input
@@ -748,14 +945,14 @@ const AccessBridge = () => {
 
         <div className="flex items-center justify-between p-6 bg-gray-50 rounded-xl">
           <div>
-            <h3 className="font-bold text-lg mb-1" style={{ fontSize: `${textSize + 2}px` }}>
+            <h3 className="font-bold text-lg mb-1 text-gray-800" style={{ fontSize: `${textSize + 2}px` }}>
               High Contrast Mode
             </h3>
             <p className="text-gray-600 text-sm">Enhance visibility with bold colors</p>
           </div>
           <button
             onClick={() => setHighContrast(!highContrast)}
-            className={`px-6 py-3 rounded-xl font-bold transition ${highContrast ? 'bg-yellow-400 text-black' : 'bg-gray-300 hover:bg-gray-400'}`}
+            className={`px-6 py-3 rounded-xl font-bold transition ${highContrast ? 'bg-yellow-400 text-black' : 'bg-gray-300 hover:bg-gray-400 text-gray-800'}`}
           >
             {highContrast ? 'ON' : 'OFF'}
           </button>
@@ -763,22 +960,22 @@ const AccessBridge = () => {
 
         <div className="flex items-center justify-between p-6 bg-gray-50 rounded-xl">
           <div>
-            <h3 className="font-bold text-lg mb-1" style={{ fontSize: `${textSize + 2}px` }}>
+            <h3 className="font-bold text-lg mb-1 text-gray-800" style={{ fontSize: `${textSize + 2}px` }}>
               Screen Reader Mode
             </h3>
             <p className="text-gray-600 text-sm">Enable audio feedback for interactions</p>
           </div>
           <button
             onClick={() => setScreenReader(!screenReader)}
-            className={`px-6 py-3 rounded-xl font-bold transition ${screenReader ? 'bg-green-500 text-white' : 'bg-gray-300 hover:bg-gray-400'}`}
+            className={`px-6 py-3 rounded-xl font-bold transition ${screenReader ? 'bg-green-500 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-800'}`}
           >
             {screenReader ? 'ON' : 'OFF'}
           </button>
         </div>
 
         <div className="p-6 bg-blue-50 border-2 border-blue-200 rounded-xl">
-          <h3 className="font-bold text-lg mb-3">Preview</h3>
-          <p style={{ fontSize: `${textSize}px` }} className={highContrast ? 'font-bold' : ''}>
+          <h3 className="font-bold text-lg mb-3 text-gray-800">Preview</h3>
+          <p style={{ fontSize: `${textSize}px` }} className={`${highContrast ? 'font-bold text-black' : 'text-gray-700'}`}>
             This is how text will appear with your current settings. 
             Adjust the controls above to customize your viewing experience.
           </p>
@@ -788,16 +985,16 @@ const AccessBridge = () => {
   );
 
   return (
-    <div className={`min-h-screen ${highContrast ? 'bg-white' : 'bg-gradient-to-br from-gray-50 to-blue-50'}`}>
-      <nav className={`${highContrast ? 'bg-black text-yellow-300' : 'bg-white'} shadow-lg sticky top-0 z-50 backdrop-blur-sm bg-opacity-95`}>
+    <div className={`min-h-screen ${highContrast ? 'bg-white' : 'bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50'}`}>
+      <nav className={`${highContrast ? 'bg-black text-yellow-300' : 'bg-white shadow-lg'} sticky top-0 z-50 backdrop-blur-sm bg-opacity-95`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('home')}>
             <Logo />
             <div>
-              <span className="text-2xl font-bold" style={{ fontSize: `${textSize + 6}px` }}>
+              <span className={`text-2xl font-bold ${highContrast ? 'text-yellow-300' : 'text-gray-800'}`} style={{ fontSize: `${textSize + 6}px` }}>
                 AccessBridge
               </span>
-              <p className="text-xs text-gray-500">AI-Powered Accessibility</p>
+              <p className={`text-xs ${highContrast ? 'text-yellow-200' : 'text-gray-600'}`}>AI-Powered Accessibility</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -813,6 +1010,8 @@ const AccessBridge = () => {
         {activeTab === 'video' && <VideoAnalysisTab />}
         {activeTab === 'tts' && <TextToSpeechTab />}
         {activeTab === 'stt' && <SpeechToTextTab />}
+        {activeTab === 'captions' && <LiveCaptionsTab />}
+        {activeTab === 'reader' && <ScreenReaderTab />}
         {activeTab === 'visual' && <VisualAidsTab />}
       </main>
 
